@@ -26,7 +26,16 @@ async function getAuthToken() {
     `&scope=NEW&country=91&email=${encodeURIComponent(MC_EMAIL)}`;
 
   const res = await fetch(url, { headers: { accept: "*/*" } });
-  const data = await res.json();
+  const rawText = await res.text();
+
+  let data;
+  try {
+    data = JSON.parse(rawText);
+  } catch {
+    throw new Error(
+      `Message Central returned non-JSON (status ${res.status}): ${rawText.slice(0, 300)}`
+    );
+  }
 
   if (!data.token) {
     throw new Error(`Failed to get auth token: ${JSON.stringify(data)}`);
