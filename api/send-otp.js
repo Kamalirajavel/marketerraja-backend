@@ -42,7 +42,11 @@ export default async function handler(req, res) {
       result = JSON.parse(rawText);
     } catch {
       console.error('Non-JSON response from Message Central:', rawText);
-      return res.status(502).json({ error: 'Unexpected response from OTP provider' });
+      return res.status(502).json({
+        error: 'Unexpected response from OTP provider',
+        statusFromProvider: mcResponse.status,
+        rawSnippet: rawText.slice(0, 300)
+      });
     }
 
     if (mcResponse.status === 401) {
