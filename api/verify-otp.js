@@ -1,67 +1,50 @@
 // api/verify-otp.js
-// Lives on Vercel only. Reads credentials from environment variables.
-// Never hardcode MESSAGECENTRAL_AUTH_TOKEN here.
+// POST { code: "1234", verificationId: "..." }
+// -> { success: true } or { success: false, error: "..." }
 
-export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', 'https://marketerraja.com');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+const { getAuthToken } = require("./_lib/messageCentral");
 
-  if (req.method === 'OPTIONS') return res.status(200).end();
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-
-  const AUTH_TOKEN = process.env.MESSAGECENTRAL_AUTH_TOKEN;
-
-  if (!AUTH_TOKEN) {
-    return res.status(500).json({
-      error: 'Server misconfigured: missing MESSAGECENTRAL_AUTH_TOKEN in Vercel environment variables.'
-    });
+module.exports = async (req, res) => {
+  res.setHeader("Access-Control-Allow-Origin", "*"); // tighten to your domain in production
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  if (req.method === "OPTIONS") return res.status(200).end();
+  if (req.method !== "POST") {
+    return res.status(405).json({ success: false, error: "Method not allowed" });
   }
 
   try {
-    const { phone, code, verificationId } = req.body || {};
-    if (!phone || !code || !verificationId) {
-      return res.status(400).json({ error: 'phone, code, and verificationId are all required' });
+    const { code, verificationId } = req.body || {};
+    if (!code || !verificationId) {
+      return res.status(400).json({ success: false, error: "Missing code or verificationId" });
     }
 
-    const validateUrl = `https://cpaas.messagecentral.com/verification/v3/validateOtp?countryCode=91&mobileNumber=${phone}&verificationId=${verificationId}&code=${code}`;
+    const token = await getAuthToken();
 
-    const mcResponse = await fetch(validateUrl, {
-      method: 'GET',
-      headers: {
-        'authToken': AUTH_TOKEN,
-        'accept': '*/*'
-      }
+    const url = `https://cpaas.messagecentral.com/verification/v2/verification/validateOtp` +
+      `?verificationId=${encodeURIComponent(verificationId)}&code=${encodeURIComponent(code)}`;
+
+    const mcRes = await fetch(url, {
+      method: "GET",
+      headers: { authToken: token },
     });
+    const mcData = await mcRes.json();
 
-    const rawText = await mcResponse.text();
+    const verified = mcData.responseCode === 200 &&
+      mcData.data?.verificationStatus === "VERIFICATION_COMPLETED";
 
-    if (mcResponse.status === 401) {
-      return res.status(502).json({
-        error: 'Message Central rejected the auth token (401 Unauthorized).',
-        hint: 'The token in MESSAGECENTRAL_AUTH_TOKEN is invalid or expired.'
-      });
-    }
-
-    let result;
-    try {
-      result = JSON.parse(rawText);
-    } catch {
-      return res.status(502).json({
-        error: 'Unexpected non-JSON response from Message Central',
-        statusFromProvider: mcResponse.status,
-        rawSnippet: rawText.slice(0, 300)
-      });
-    }
-
-    if (result.responseCode === 200 && result.data.verificationStatus === 'VERIFICATION_COMPLETED') {
+    if (verified) {
       return res.status(200).json({ success: true });
-    } else {
-      return res.status(400).json({ success: false, error: 'Invalid OTP' });
     }
 
+    return res.status(200).json({
+      success: false,
+      error: mcData.data?.verificationStatus === "EXPIRED"
+        ? "OTP expired, please request a new one"
+        : "Incorrect OTP",
+    });
   } catch (err) {
-    console.error('Server error:', err);
-    return res.status(500).json({ error: 'Internal server error', details: String(err) });
+    console.error(err);
+    return res.status(500).json({ success: false, error: err.message });
   }
-}
+};
