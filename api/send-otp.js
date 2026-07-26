@@ -38,7 +38,17 @@ module.exports = async (req, res) => {
       method: "POST",
       headers: { authToken: token },
     });
-    const mcData = await mcRes.json();
+    const mcRawText = await mcRes.text();
+
+    let mcData;
+    try {
+      mcData = JSON.parse(mcRawText);
+    } catch {
+      return res.status(502).json({
+        success: false,
+        error: `Message Central send-otp returned non-JSON (status ${mcRes.status}): ${mcRawText.slice(0, 300)}`,
+      });
+    }
 
     if (mcData.responseCode !== 200 || !mcData.data) {
       return res.status(502).json({
