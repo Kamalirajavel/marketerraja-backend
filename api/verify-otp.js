@@ -21,7 +21,8 @@ module.exports = async (req, res) => {
 
     const token = await getAuthToken();
 
-    const url = `https://cpaas.messagecentral.com/verification/v2/verification/validateOtp` +
+    // v3 endpoint
+    const url = `https://cpaas.messagecentral.com/verification/v3/validateOtp` +
       `?verificationId=${encodeURIComponent(verificationId)}&code=${encodeURIComponent(code)}`;
 
     const mcRes = await fetch(url, {
@@ -36,7 +37,7 @@ module.exports = async (req, res) => {
     } catch {
       return res.status(502).json({
         success: false,
-        error: `Message Central validate-otp returned non-JSON (status ${mcRes.status}): ${mcRawText.slice(0, 300)}`,
+        error: `Message Central validate returned non-JSON (status ${mcRes.status}): ${mcRawText.slice(0, 300)}`,
       });
     }
 
