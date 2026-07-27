@@ -2,7 +2,7 @@
 // POST { phone: "9876543210" }
 // -> { success: true, verificationId: "..." }
 
-const { getAuthToken, CUSTOMER_ID } = require("./_lib/messageCentral");
+const { getAuthToken } = require("./_lib/messageCentral");
 
 // very basic in-memory rate limit per phone (resets on cold start — good enough to start with)
 const lastSentAt = new Map();
@@ -30,9 +30,9 @@ module.exports = async (req, res) => {
 
     const token = await getAuthToken();
 
-    const url = `https://cpaas.messagecentral.com/verification/v2/verification/send` +
-      `?countryCode=91&customerId=${encodeURIComponent(CUSTOMER_ID)}` +
-      `&flowType=SMS&mobileNumber=${encodeURIComponent(phone)}&otpLength=6`;
+    // v3 endpoint — does NOT take customerId as a query param
+    const url = `https://cpaas.messagecentral.com/verification/v3/send` +
+      `?countryCode=91&flowType=SMS&mobileNumber=${encodeURIComponent(phone)}&otpLength=6`;
 
     const mcRes = await fetch(url, {
       method: "POST",
@@ -40,26 +40,13 @@ module.exports = async (req, res) => {
     });
     const mcRawText = await mcRes.text();
 
-    if (mcRes.status === 401 || mcRes.status === 403) {
-      return res.status(502).json({
-        success: false,
-        error: `Message Central rejected the request (status ${mcRes.status})`,
-        debug: {
-          customerIdUsed: CUSTOMER_ID
-            ? `${CUSTOMER_ID.slice(0, 4)}...${CUSTOMER_ID.slice(-4)} (length ${CUSTOMER_ID.length})`
-            : "MISSING",
-          tokenPrefix: token ? token.slice(0, 15) + "..." : "MISSING",
-        },
-      });
-    }
-
     let mcData;
     try {
       mcData = JSON.parse(mcRawText);
     } catch {
       return res.status(502).json({
         success: false,
-        error: `Message Central send-otp returned non-JSON (status ${mcRes.status}): ${mcRawText.slice(0, 300)}`,
+        error: `Message Central send returned non-JSON (status ${mcRes.status}): ${mcRawText.slice(0, 300)}`,
       });
     }
 
@@ -67,7 +54,7 @@ module.exports = async (req, res) => {
       return res.status(502).json({
         success: false,
         error: "Message Central rejected the request",
-        hint: mcData.message || null,
+        hint: mcData.message || mcData.data?.errorMessage || null,
       });
     }
 
