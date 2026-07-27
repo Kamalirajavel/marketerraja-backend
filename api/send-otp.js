@@ -40,6 +40,19 @@ module.exports = async (req, res) => {
     });
     const mcRawText = await mcRes.text();
 
+    if (mcRes.status === 401 || mcRes.status === 403) {
+      return res.status(502).json({
+        success: false,
+        error: `Message Central rejected the request (status ${mcRes.status})`,
+        debug: {
+          customerIdUsed: CUSTOMER_ID
+            ? `${CUSTOMER_ID.slice(0, 4)}...${CUSTOMER_ID.slice(-4)} (length ${CUSTOMER_ID.length})`
+            : "MISSING",
+          tokenPrefix: token ? token.slice(0, 15) + "..." : "MISSING",
+        },
+      });
+    }
+
     let mcData;
     try {
       mcData = JSON.parse(mcRawText);
